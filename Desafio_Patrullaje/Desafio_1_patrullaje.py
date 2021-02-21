@@ -93,7 +93,7 @@ my_robot.startSimulation(print_status=False)
 #my_robot.foward(0.2,0)
 ################################################################################################
 # cantidad de iteraciones de la simulación
-simulation_steps = 200
+simulation_steps = 180
 
 # Estado 1: localización, en este estado se quiere ejectuar el algoritmo de
 # localización del robot
@@ -142,6 +142,17 @@ for i in range(simulation_steps):
             my_robot.setLinearVelocity(0.2)
             my_robot.setAngularVelocity(0)
             paso = 4
+    
+    elif(paso == 4):
+        
+        if(my_robot.getGroundTruth()[1] < -1.2):
+            my_robot.setLinearVelocity(0)
+            my_robot.setAngularVelocity(0.5)
+        
+        if(my_robot.getGroundTruth()[2] > 0):
+            my_robot.setLinearVelocity(0.2)
+            my_robot.setAngularVelocity(0)
+            paso = 5
         
     
     # Estado 1: se quiere localizar al robot
@@ -153,8 +164,8 @@ for i in range(simulation_steps):
             # x_0 = np.random.uniform(0,occ_map_width)
             # y_0 = np.random.uniform(0,occ_map_height)
             # theta_0 = np.random.uniform(-math.pi,math.pi)
-            x_0 = -0.5
-            y_0 = -0.5
+            x_0 = 0
+            y_0 = 0
             theta_0 = 0
             
             # pose estimada inicial del filtro de kalman
@@ -189,6 +200,7 @@ for i in range(simulation_steps):
             t_new = my_robot.getSimulationTime()
             T = t_new - t_old
             od_new = my_robot.getOdometry()
+            print(T)
             if(T != 0):
                 # consulto la lectura actual de odometría y se lo paso al 
                 # filtro de kalman para que prediga la próxima pose

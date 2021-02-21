@@ -104,7 +104,7 @@ class EKF():
         # motion_model_velocity() la estimación termina divirgiendo. Por eso
         # uso una forma más sencilla
         
-        # (v,w,gamma) = self.motion_model_velocity(od_new,od_old)
+        #(v,w,gamma) = self.motion_model_velocity(od_new,od_old)
         
         v = np.sqrt((od_old[0] - od_new[0])**2 + (od_old[1] - od_new[1])**2)/t
         w = (od_new[2] - od_old[2])/t
@@ -126,50 +126,50 @@ class EKF():
         #     #v21 = (y_avg_new - y_avg)/v
         #     v22 = -(v_w / w) * cos(theta_avg) + (v_w/w) * (sin(theta_avg + w * t) * w * t + cos(theta_avg + w * t))
             
-        #     # Jacobiano con respecto al control
-        #     # V = [[v11,v12,0],
-        #     #       [v21,v22,0],
-        #     #       [0,t,t]]
+            # Jacobiano con respecto al control
+            # V = [[v11,v12,0],
+            #       [v21,v22,0],
+            #       [0,t,t]]
             
-        #     V = [[v11,v12],
-        #           [v21,v22],
-        #           [0,t]]
+            # V = [[v11,v12],
+            #       [v21,v22],
+            #       [0,t]]
             
 
 
             
         
-       # else:
+        #else:
             # Usando las velocidades que obtuve a partir de las lecturas de odometría
             # calculo la predicción de la próxima pose del robot
         x_avg_new = x_avg + v * cos(theta_avg) * t
         y_avg_new = y_avg + v * sin(theta_avg) * t
         theta_avg_new = theta_avg + w * t
         
-        V = [[cos(od_old[2]) * t,0],
-              [sin(od_old[2]) * t,0],
-              [0,0]]
+        # V = [[cos(od_old[2]) * t,0],
+        #       [sin(od_old[2]) * t,0],
+        #       [0,0]]
         
             # Jacobiano del modelo de movimiento respecto de la velocidad lineal
             # y angular. Se usa para calcular la matriz de covarianza de la pose,
             # a partir de la matriz de covarianza de las velocidades.
-            # V = [[cos(theta_avg)*t,0],
-            #       [sin(theta_avg)*t,0],
-            #       [0,t]]
+        V = [[cos(theta_avg)*t,0],
+             [sin(theta_avg)*t,0],
+             [0,t]]
         
         
         # G = [[1, 0, g13],
         #      [0, 1, g23],
         #      [0, 0, 1]] 
         
-        # G = [[1, 0, -(od[1] - y_avg)],
-        #      [0, 1, (od[0] - x_avg)],
-        #      [0, 0, 1]]
+        # G = [[1, 0, -v * t * sin(theta_avg)],
+        #       [0, 1, v * t * cos(theta_avg)],
+        #       [0, 0, 1]]
         
         # Jacobiano del modelo de movimiento respecto de la pose anterior
         G = [[1, 0, y_avg - y_avg_new],
-             [0, 1, -x_avg + x_avg_new],
-             [0, 0, 1]]
+              [0, 1, -x_avg + x_avg_new],
+              [0, 0, 1]]
     
         
         # x_avg = od[0]
