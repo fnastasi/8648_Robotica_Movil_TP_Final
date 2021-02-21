@@ -93,7 +93,7 @@ my_robot.startSimulation(print_status=False)
 #my_robot.foward(0.2,0)
 ################################################################################################
 # cantidad de iteraciones de la simulación
-simulation_steps = 6000
+simulation_steps = 200
 
 # Estado 1: localización, en este estado se quiere ejectuar el algoritmo de
 # localización del robot
@@ -105,16 +105,19 @@ localization_on = False
 paso = 1
 
 for i in range(simulation_steps):
+    print(i)
     if(paso == 1):
         
         if(my_robot.getGroundTruth()[0] > 0.5):
             my_robot.setLinearVelocity(0)
             my_robot.setAngularVelocity(0.5)
+            #print("v = 0", my_robot.getSimulationTime())
     
         if(my_robot.getGroundTruth()[2] > np.pi/2):
             my_robot.setLinearVelocity(0.2)
             my_robot.setAngularVelocity(0)
             paso = 2
+            #print("v ya no es 0", my_robot.getSimulationTime())
             
         
         
@@ -129,6 +132,16 @@ for i in range(simulation_steps):
             my_robot.setAngularVelocity(0)
             paso = 3
     
+    elif(paso == 3):
+        
+        if(my_robot.getGroundTruth()[0] < -0.5):
+            my_robot.setLinearVelocity(0)
+            my_robot.setAngularVelocity(0.5)
+        
+        if(0 > my_robot.getGroundTruth()[2] > -np.pi/2):
+            my_robot.setLinearVelocity(0.2)
+            my_robot.setAngularVelocity(0)
+            paso = 4
         
     
     # Estado 1: se quiere localizar al robot
@@ -175,10 +188,11 @@ for i in range(simulation_steps):
             # tiempo desde la última lectura de odometría
             t_new = my_robot.getSimulationTime()
             T = t_new - t_old
+            od_new = my_robot.getOdometry()
             if(T != 0):
                 # consulto la lectura actual de odometría y se lo paso al 
                 # filtro de kalman para que prediga la próxima pose
-                od_new = my_robot.getOdometry()
+                
                 filtro_de_kalman.prediction_step(od_new,od_old,T)
                 
                 od_old = od_new
@@ -189,6 +203,8 @@ for i in range(simulation_steps):
                 T = t_new - t_old
                 filtro_de_kalman.correction_step(my_robot.getLidarMeaurement(),T)
                 t_old = t_new
+                
+            od_old = od_new
     
     # me guardo la pose según el filtro de kalman y la pose real para comparar
     # al final de la simulación
@@ -254,7 +270,9 @@ y_real = []
 theta_ekf = []
 theta_real = []
 
-for i in range(0,len(valores_ekf)):
+M = len(valores_ekf)
+
+for i in range(0,M):
     x_ekf.append(valores_ekf[i][0])
     x_real.append(valores_reales[i][0])
     
@@ -264,31 +282,34 @@ for i in range(0,len(valores_ekf)):
     theta_ekf.append(valores_ekf[i][2])
     theta_real.append(valores_reales[i][2])
     
-tiempo_sim = np.arange(0,simulation_steps,1)
-tiempo_sim = tiempo_sim * my_robot.getSimulationTime() / simulation_steps
+tiempo_sim = np.arange(0,M,1)
+tiempo_sim = tiempo_sim * my_robot.getSimulationTime() / M
+
+tiempo_plot_x = int(M)
 
 fig1, ax1 = plt.subplots(1)
-ax1.plot(tiempo_sim[0:simulation_steps],x_ekf[0:simulation_steps],'b-',label = 'EKF')
-ax1.plot(tiempo_sim[0:simulation_steps],x_real[0:simulation_steps],'r-',label = 'real')
+ax1.plot(tiempo_sim[0:tiempo_plot_x],x_ekf[0:tiempo_plot_x],'b-',label = 'EKF')
+ax1.plot(tiempo_sim[0:tiempo_plot_x],x_real[0:tiempo_plot_x],'r-',label = 'real')
 ax1.set_xlabel('tiempo, [s]')
 ax1.set_ylabel('x')
 ax1.set_title('posición real vs estimación con EKF, en x')
 ax1.grid(True)
 ax1.legend()
 
+tiempo_plot_y = int(M)
 fig2, ax2 = plt.subplots(1)
-ax2.plot(tiempo_sim[0:simulation_steps],y_ekf[0:simulation_steps],'b-',label = 'EKF')
-ax2.plot(tiempo_sim[0:simulation_steps],y_real[0:simulation_steps],'r-',label = 'real')
+ax2.plot(tiempo_sim[0:tiempo_plot_y],y_ekf[0:tiempo_plot_y],'b-',label = 'EKF')
+ax2.plot(tiempo_sim[0:tiempo_plot_y],y_real[0:tiempo_plot_y],'r-',label = 'real')
 ax2.set_xlabel('tiempo, [s]')
 ax2.set_ylabel('y')
 ax2.set_title('posición real vs estimación con EKF, en y')
 ax2.grid(True)
 ax2.legend()
 
-
+tiempo_plot_theta = int(M)
 fig3, ax3 = plt.subplots(1)
-ax3.plot(tiempo_sim[0:simulation_steps],theta_ekf[0:simulation_steps],'b-',label = 'EKF')
-ax3.plot(tiempo_sim[0:simulation_steps],theta_real[0:simulation_steps],'r-',label = 'real')
+ax3.plot(tiempo_sim[0:tiempo_plot_theta],theta_ekf[0:tiempo_plot_theta],'b-',label = 'EKF')
+ax3.plot(tiempo_sim[0:tiempo_plot_theta],theta_real[0:tiempo_plot_theta],'r-',label = 'real')
 ax3.set_xlabel('tiempo, [s]')
 ax3.set_ylabel('theta')
 ax3.set_title('posición real vs estimación con EKF, en theta')

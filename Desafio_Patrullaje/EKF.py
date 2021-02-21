@@ -54,9 +54,10 @@ class EKF():
             num = (od_old[0] - od_new[0]) * np.cos(od_old[2]) + (od_old[1] - od_new[1]) * np.sin(od_old[2])
     
             u = 0.5 * (num/den)
+            print(u)
         
-            if(u > 999):
-                u = 999
+            # if(u > 999):
+            #     u = 999
     
             x_estrella = (od_old[0] + od_new[0]) / 2 + u * (od_old[1] - od_new[1])
             y_estrella = (od_old[1] + od_new[1]) / 2 + u * (od_new[0] - od_old[0])
@@ -110,57 +111,51 @@ class EKF():
         
         # # Dependiendo de si w=0 o no, cambia la expresión de los jacobianos y
         # # de la posición esperada
-        #if(w!=0):
-        #    v_w = v/w
+        # if(w!=0):
+        #     v_w = v/w
             
-            # calculo la nueva pose esperada
-        #    x_avg_new = x_avg - v_w * sin(theta_avg) + v_w * cos(theta_avg + w * t)
-        #    y_avg_new = y_avg + v_w * cos(theta_avg) - v_w * cos(theta_avg + w * t)
-        #    theta_avg_new = theta_avg + w * t + gamma * t
-        #     # g13 = -v_w * cos(theta_avg) + v_w * cos(theta_avg + w * t)
-        #     # g23 = -v_w * sin(theta_avg) + v_w * sin(theta_avg + w * t)
+        #     # calculo la nueva pose esperada
+        #     x_avg_new = x_avg - v_w * sin(theta_avg) + v_w * cos(theta_avg + w * t)
+        #     y_avg_new = y_avg + v_w * cos(theta_avg) - v_w * cos(theta_avg + w * t)
+        #     theta_avg_new = theta_avg + w * t
             
-            #v11 = (-sin(theta_avg) + sin(theta_avg + w * t))/w
-        #    v11 = (x_avg_new - x_avg)/v
-        #    v12 = (v_w / w) * sin(theta_avg) + (v_w / w) * (cos(theta_avg + w * t) * t * w - sin(theta_avg + w * t))
-            #v21 = (cos(theta_avg) - cos(theta_avg + w * t))/w
-        #    v21 = (y_avg_new - y_avg)/v
-        #    v22 = -(v_w / w) * cos(theta_avg) + (v_w/w) * (sin(theta_avg + w * t) * w * t + cos(theta_avg + w * t))
+        #     v11 = (-sin(theta_avg) + sin(theta_avg + w * t))/w
+        #     #v11 = (x_avg_new - x_avg)/v
+        #     v12 = (v_w / w) * sin(theta_avg) + (v_w / w) * (cos(theta_avg + w * t) * t * w - sin(theta_avg + w * t))
+        #     v21 = (cos(theta_avg) - cos(theta_avg + w * t))/w
+        #     #v21 = (y_avg_new - y_avg)/v
+        #     v22 = -(v_w / w) * cos(theta_avg) + (v_w/w) * (sin(theta_avg + w * t) * w * t + cos(theta_avg + w * t))
             
         #     # Jacobiano con respecto al control
-            # V = [[v11,v12,0],
-            #       [v21,v22,0],
-            #       [0,t,t]]
+        #     # V = [[v11,v12,0],
+        #     #       [v21,v22,0],
+        #     #       [0,t,t]]
             
-            # V = [[v11,v12],
-            #       [v21,v22],
-            #       [0,t]]
+        #     V = [[v11,v12],
+        #           [v21,v22],
+        #           [0,t]]
             
 
 
             
         
-        #else:
-            # g13 = -v * sin(theta_avg) * t
-            # g23 = v * cos(theta_avg) * t
-         
-            
-        # Usando las velocidades que obtuve a partir de las lecturas de odometría
-        # calculo la predicción de la próxima pose del robot
+       # else:
+            # Usando las velocidades que obtuve a partir de las lecturas de odometría
+            # calculo la predicción de la próxima pose del robot
         x_avg_new = x_avg + v * cos(theta_avg) * t
         y_avg_new = y_avg + v * sin(theta_avg) * t
         theta_avg_new = theta_avg + w * t
-            
-            # V = [[(od[0] - x_avg)/v,0,0],
-            #       [(od[1] - y_avg)/v,0,0],
-            #       [0,0,t]]
         
-        # Jacobiano del modelo de movimiento respecto de la velocidad lineal
-        # y angular. Se usa para calcular la matriz de covarianza de la pose,
-        # a partir de la matriz de covarianza de las velocidades.
-        V = [[cos(theta_avg)*t,0],
-              [sin(theta_avg)*t,0],
-              [0,t]]
+        V = [[cos(od_old[2]) * t,0],
+              [sin(od_old[2]) * t,0],
+              [0,0]]
+        
+            # Jacobiano del modelo de movimiento respecto de la velocidad lineal
+            # y angular. Se usa para calcular la matriz de covarianza de la pose,
+            # a partir de la matriz de covarianza de las velocidades.
+            # V = [[cos(theta_avg)*t,0],
+            #       [sin(theta_avg)*t,0],
+            #       [0,t]]
         
         
         # G = [[1, 0, g13],
