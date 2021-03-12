@@ -29,8 +29,9 @@ from ploteo_de_la_simulacion import drawRobotPos
 from ploteo_de_la_simulacion import drawLidarMeasure
 from ploteo_de_la_simulacion import updatedLidarDraw
 
-# librería del filtro de kalman extendido
-from EKF import EKF
+# libreria de filtro de partículas y partícual
+from particle_filter import particle
+from particle_filter import particle_filter
 
 # ##################################################################################3
 
@@ -86,11 +87,11 @@ my_robot.turnLidar_ON()
 
 # variable donde guardo las lecturas del kalman filter para comparar con ground
 # truth, luego de finalizada la simulación
-valores_ekf = []
+valores_pf = []
 valores_reales = []
 valores_odometry = []
 
-my_robot.startSimulation(print_status=False)
+my_robot.startSimulation(print_status=True)
 #my_robot.foward(0.2,0)
 ################################################################################################
 # cantidad de iteraciones de la simulación
@@ -162,119 +163,125 @@ for i in range(simulation_steps):
         # comenzar a ejecutar
         
         if(localization_on == False):
-            # x_0 = np.random.uniform(0,occ_map_width)
-            # y_0 = np.random.uniform(0,occ_map_height)
-            # theta_0 = np.random.uniform(-math.pi,math.pi)
-            x_0 = 0
-            y_0 = 0
-            theta_0 = 0.0
             
-            # pose estimada inicial del filtro de kalman
-            pos_0 = np.array([x_0,y_0,theta_0]).T
-            # varianza inicial
-            var_0 = np.eye(3) * 100
-            # parámetros de error que se le pasan al filtro de kalman para que
-            # pueda hacer sus cálculos
+            # inicializo el filtro de partículas
+            
             error_parameters = np.array([0.10, 0.20, 0.10, 0.20, 0.25, 0.25])
             
-            # inicializo el filtro de kalman
+            # número de partículas
+            N = 100
             
-            filtro_de_kalman = EKF(pos_0,var_0,error_parameters,my_robot.getTimeStep(),my_robot.getLidarResolution(),np.array([0.09, 0.0, math.pi]))
+            # inicializo el filtro de partículas
+            filtro_de_particulas = particle_filter(N,error_parameters,my_robot.getLidarResolution(),np.array([0.09, 0.0, math.pi]),)
             
-            # le digo al filtro de kalman en qué mapa se va a realizar la
-            # localización
-            filtro_de_kalman.loadoccmap(occ_map,occupation_map_scale_factor)
-            
+            # le cargo el mapa
+            filtro_de_particulas.loadoccmap(occ_map,occupation_map_scale_factor)
+
             # indico que se está ejecutando una rutina de localización
             localization_on = True
+
             # instantes de tiempo de la simulación lectura de odometría del
             # robot. Se usarán para calcular después las predicciones y 
             # correcciones.
-            t_old_od = my_robot.getSimulationTime()
-            t_old_corr = t_old_od
+            t_old = my_robot.getSimulationTime()
+
             od_old = my_robot.getOdometry()
+            
+            resample_flag = False
             
         # si se está ejecutando una rutina de localización, se continua con esta
         else:
             
             # consulto el tiempo de simulación actual para calcular el paso de
             # tiempo desde la última lectura de odometría
-            t_new_od = my_robot.getSimulationTime()
-            T = t_new_od - t_old_od
+            t_new = my_robot.getSimulationTime()
+            T = t_new - t_old
             od_new = my_robot.getOdometry()
-
-            if(T != 0):
-                # consulto la lectura actual de odometría y se lo paso al 
-                # filtro de kalman para que prediga la próxima pose
+            if(T!=0):
+                filtro_de_particulas.update_particles_motion(od_old,od_new,T)
                 
-                filtro_de_kalman.prediction_step(od_new,od_old,T)
-                #print("predict",filtro_de_kalman.get_mean_position())
-                od_old = od_new
-                t_old_od = t_new_od
+            od_old = od_new
+            t_old = t_new
                 
-                # paso de corrección
-                t_new_corr = my_robot.getSimulationTime()
-                T = t_new_corr - t_old_corr
-                #if(T!=0):
-                medida = my_robot.getLidarMeaurement()
-                if(medida.all() != 0):
-                    filtro_de_kalman.correction_step(medida,T)
-                #print("corr",filtro_de_kalman.get_mean_position())
-                t_old_corr = t_new_corr
+            if(resample_flag == True):
                 
-                od_old = od_new
+                # como el resampleo tarda bastante, detengo al robot para no
+                # chocarme con nada mientras resampleo
+                v_old = my_robot.getLinearVelocity()
+                w_old = my_robot.getAngularVelocity()
+                my_robot.setLinearVelocity(0)
+                my_robot.setAngularVelocity(0)
+                
+                # actualización de las partículas
+                medidas = my_robot.getLidarMeaurement()
+                if(medidas.all() != 0):
+                    filtro_de_particulas.update_particles_measurements(medidas)
+                resample_flag = False
+                my_robot.setLinearVelocity(v_old)
+                my_robot.setAngularVelocity(w_old)
+                    
+        # me fijo si es necesario hacer un resampling
+        desvio = filtro_de_particulas.std_err_particle_pos()
+        
+        if((desvio[0] or desvio[1]) > 0.1):
+            resample_flag = True
+            print("HAY QUE RESAMPLEAR")
+        
+        
+                
     
     # me guardo la pose según el filtro de kalman y la pose real para comparar
     # al final de la simulación
-    print("GT: ", my_robot.getGroundTruth(),"EKF: ",filtro_de_kalman.get_mean_position(),"t: ", my_robot.getSimulationTime())
-    #print("sigma: ", filtro_de_kalman.sigma)
-    valores_ekf.append(filtro_de_kalman.get_mean_position())
+    
+    pose_media_particulas = filtro_de_particulas.mean_particle_pos()
+    print("PF: ", pose_media_particulas)
+    valores_pf.append(pose_media_particulas)
     valores_reales.append(my_robot.getGroundTruth())
     valores_odometry.append(my_robot.getOdometry())
     
-    # # The state of the robot is consulted for drawing purpose
-    # # To update de draw of robot's status could take more time that
-    # # simulation step (dt = 0.1 seg.)
-    # # As simulation run in an independent thread the draw will be refreshing 
-    # # at a lower frequency.
-    # od = my_robot.getOdometry()
-    # gt = my_robot.getGroundTruth()
+    # The state of the robot is consulted for drawing purpose
+    # To update de draw of robot's status could take more time that
+    # simulation step (dt = 0.1 seg.)
+    # As simulation run in an independent thread the draw will be refreshing 
+    # at a lower frequency.
+    od = my_robot.getOdometry()
+    gt = my_robot.getGroundTruth()
 
-    # # # gt_icon.set_center((gt[0] * map_scale[0] + map_center[0], gt[1] * map_scale[1] + map_center[1])) # only for Ptyhon 3
-    # # gt_icon.center = gt[0] * map_scale[0] + map_center[0], gt[1] * map_scale[1] + map_center[1]
-    # # #gt_icon.center = gt[0] * map_scale[0], gt[1] * map_scale[1]
-    # # gt_bearing.set_xdata([gt[0] * map_scale[0] + map_center[0], gt[0] * map_scale[0] + map_center[0] + 0.5 * map_scale[0] * my_robot.diameter * np.cos(gt[2])])
-    # # #gt_bearing.set_xdata([gt[0] * map_scale[0], gt[0] * map_scale[0] + 0.5 * map_scale[0] * my_robot.diameter * np.cos(gt[2])])
-    # # gt_bearing.set_ydata([gt[1] * map_scale[1] + map_center[1], gt[1] * map_scale[1] + map_center[1] + 0.5 * map_scale[1] * my_robot.diameter * np.sin(gt[2])])
-    # # #gt_bearing.set_ydata([gt[1] * map_scale[1], gt[1] * map_scale[1] + 0.5 * map_scale[1] * my_robot.diameter * np.sin(gt[2])])
-
+    # # gt_icon.set_center((gt[0] * map_scale[0] + map_center[0], gt[1] * map_scale[1] + map_center[1])) # only for Ptyhon 3
     # gt_icon.center = gt[0] * map_scale[0] + map_center[0], gt[1] * map_scale[1] + map_center[1]
+    # #gt_icon.center = gt[0] * map_scale[0], gt[1] * map_scale[1]
     # gt_bearing.set_xdata([gt[0] * map_scale[0] + map_center[0], gt[0] * map_scale[0] + map_center[0] + 0.5 * map_scale[0] * my_robot.diameter * np.cos(gt[2])])
+    # #gt_bearing.set_xdata([gt[0] * map_scale[0], gt[0] * map_scale[0] + 0.5 * map_scale[0] * my_robot.diameter * np.cos(gt[2])])
     # gt_bearing.set_ydata([gt[1] * map_scale[1] + map_center[1], gt[1] * map_scale[1] + map_center[1] + 0.5 * map_scale[1] * my_robot.diameter * np.sin(gt[2])])
-    
-    # # # od_icon.set_center((od[0]* map_scale[0]  + map_center[0], od[1] * map_scale[1]  + map_center[1])) # only for Ptyhon 3
-    # # od_icon.center = od[0]* map_scale[0]  + map_center[0], od[1] * map_scale[1]  + map_center[1]
-    # # #od_icon.center = od[0]* map_scale[0], od[1] * map_scale[1]
-    # # od_bearing.set_xdata([od[0] * map_scale[0] + map_center[0], od[0] * map_scale[0] + map_center[0] + 0.5 * my_robot.diameter * map_scale[0] * np.cos(od[2])])
-    # # #od_bearing.set_xdata([od[0] * map_scale[0], od[0] * map_scale[0] + 0.5 * my_robot.diameter * map_scale[0] * np.cos(od[2])])
-    # # od_bearing.set_ydata([od[1] * map_scale[1] + map_center[1], od[1] * map_scale[1] + map_center[1] + 0.5 * my_robot.diameter * map_scale[1] * np.sin(od[2])])
-    # # #od_bearing.set_ydata([od[1] * map_scale[1], od[1] * map_scale[1] + 0.5 * my_robot.diameter * map_scale[1] * np.sin(od[2])])
+    # #gt_bearing.set_ydata([gt[1] * map_scale[1], gt[1] * map_scale[1] + 0.5 * map_scale[1] * my_robot.diameter * np.sin(gt[2])])
 
+    gt_icon.center = gt[0] * map_scale[0] + map_center[0], gt[1] * map_scale[1] + map_center[1]
+    gt_bearing.set_xdata([gt[0] * map_scale[0] + map_center[0], gt[0] * map_scale[0] + map_center[0] + 0.5 * map_scale[0] * my_robot.diameter * np.cos(gt[2])])
+    gt_bearing.set_ydata([gt[1] * map_scale[1] + map_center[1], gt[1] * map_scale[1] + map_center[1] + 0.5 * map_scale[1] * my_robot.diameter * np.sin(gt[2])])
+    
+    # # od_icon.set_center((od[0]* map_scale[0]  + map_center[0], od[1] * map_scale[1]  + map_center[1])) # only for Ptyhon 3
     # od_icon.center = od[0]* map_scale[0]  + map_center[0], od[1] * map_scale[1]  + map_center[1]
+    # #od_icon.center = od[0]* map_scale[0], od[1] * map_scale[1]
     # od_bearing.set_xdata([od[0] * map_scale[0] + map_center[0], od[0] * map_scale[0] + map_center[0] + 0.5 * my_robot.diameter * map_scale[0] * np.cos(od[2])])
+    # #od_bearing.set_xdata([od[0] * map_scale[0], od[0] * map_scale[0] + 0.5 * my_robot.diameter * map_scale[0] * np.cos(od[2])])
     # od_bearing.set_ydata([od[1] * map_scale[1] + map_center[1], od[1] * map_scale[1] + map_center[1] + 0.5 * my_robot.diameter * map_scale[1] * np.sin(od[2])])
+    # #od_bearing.set_ydata([od[1] * map_scale[1], od[1] * map_scale[1] + 0.5 * my_robot.diameter * map_scale[1] * np.sin(od[2])])
+
+    od_icon.center = od[0]* map_scale[0]  + map_center[0], od[1] * map_scale[1]  + map_center[1]
+    od_bearing.set_xdata([od[0] * map_scale[0] + map_center[0], od[0] * map_scale[0] + map_center[0] + 0.5 * my_robot.diameter * map_scale[0] * np.cos(od[2])])
+    od_bearing.set_ydata([od[1] * map_scale[1] + map_center[1], od[1] * map_scale[1] + map_center[1] + 0.5 * my_robot.diameter * map_scale[1] * np.sin(od[2])])
     
 
-    # lidar_values = my_robot.getLidarMeaurement()
-    # updatedLidarDraw(lidarPoints, gt, lidar_values, my_robot.getLidarResolution(), map_center, map_scale)
+    lidar_values = my_robot.getLidarMeaurement()
+    updatedLidarDraw(lidarPoints, gt, lidar_values, my_robot.getLidarResolution(), map_center, map_scale)
 
-    # v = my_robot.getLinearVelocity()
-    # w = my_robot.getAngularVelocity()
-    # s_text = "time = " + "{:.2f}".format(my_robot.getSimulationTime()) + "seg   u_t=(" + "{:.2f}".format(v)  + " ; " + "{:.2f}".format(w) + ") Collision = " + str(my_robot.getBumperSensorValue()) 
-    # status_text.set_text(s_text)
+    v = my_robot.getLinearVelocity()
+    w = my_robot.getAngularVelocity()
+    s_text = "time = " + "{:.2f}".format(my_robot.getSimulationTime()) + "seg   u_t=(" + "{:.2f}".format(v)  + " ; " + "{:.2f}".format(w) + ") Collision = " + str(my_robot.getBumperSensorValue()) 
+    status_text.set_text(s_text)
 
-    # plt.draw()
-    # plt.pause(my_robot.dt)
+    plt.draw()
+    plt.pause(my_robot.dt)
 
     # As plot function takes time it is not needed to sleep main thread
     # if it is not the case consider to sleep main thread.
@@ -282,30 +289,30 @@ for i in range(simulation_steps):
   
 my_robot.stopSimulation()
 
-x_ekf = []
+x_pf = []
 x_real = []
 x_odom = []
 
-y_ekf = []
+y_pf = []
 y_real = []
 y_odom = []
 
-theta_ekf = []
+theta_pf = []
 theta_real = []
 theta_odom = []
 
-M = len(valores_ekf)
+M = len(valores_pf)
 
 for i in range(0,M):
-    x_ekf.append(valores_ekf[i][0])
+    x_pf.append(valores_pf[i][0])
     x_real.append(valores_reales[i][0])
     x_odom.append(valores_odometry[i][0])
     
-    y_ekf.append(valores_ekf[i][1])
+    y_pf.append(valores_pf[i][1])
     y_real.append(valores_reales[i][1])
     y_odom.append(valores_odometry[i][1])
     
-    theta_ekf.append(valores_ekf[i][2])
+    theta_pf.append(valores_pf[i][2])
     theta_real.append(valores_reales[i][2])
     theta_odom.append(valores_odometry[i][2])
     
@@ -315,7 +322,7 @@ tiempo_sim = tiempo_sim * my_robot.getSimulationTime() / M
 tiempo_plot_x = int(M)
 
 fig1, ax1 = plt.subplots(1)
-ax1.plot(tiempo_sim[0:tiempo_plot_x],x_ekf[0:tiempo_plot_x],'b-',label = 'EKF')
+ax1.plot(tiempo_sim[0:tiempo_plot_x],x_pf[0:tiempo_plot_x],'b-',label = 'EKF')
 ax1.plot(tiempo_sim[0:tiempo_plot_x],x_real[0:tiempo_plot_x],'r-',label = 'real')
 ax1.plot(tiempo_sim[0:tiempo_plot_x],x_odom[0:tiempo_plot_x],'g-',label = 'odom')
 ax1.set_xlabel('tiempo, [s]')
@@ -326,7 +333,7 @@ ax1.legend()
 
 tiempo_plot_y = int(M)
 fig2, ax2 = plt.subplots(1)
-ax2.plot(tiempo_sim[0:tiempo_plot_y],y_ekf[0:tiempo_plot_y],'b-',label = 'EKF')
+ax2.plot(tiempo_sim[0:tiempo_plot_y],y_pf[0:tiempo_plot_y],'b-',label = 'EKF')
 ax2.plot(tiempo_sim[0:tiempo_plot_y],y_real[0:tiempo_plot_y],'r-',label = 'real')
 ax2.plot(tiempo_sim[0:tiempo_plot_x],y_odom[0:tiempo_plot_x],'g-',label = 'odom')
 ax2.set_xlabel('tiempo, [s]')
@@ -337,7 +344,7 @@ ax2.legend()
 
 tiempo_plot_theta = int(M)
 fig3, ax3 = plt.subplots(1)
-ax3.plot(tiempo_sim[0:tiempo_plot_theta],theta_ekf[0:tiempo_plot_theta],'b-',label = 'EKF')
+ax3.plot(tiempo_sim[0:tiempo_plot_theta],theta_pf[0:tiempo_plot_theta],'b-',label = 'EKF')
 ax3.plot(tiempo_sim[0:tiempo_plot_theta],theta_real[0:tiempo_plot_theta],'r-',label = 'real')
 ax3.plot(tiempo_sim[0:tiempo_plot_x],theta_odom[0:tiempo_plot_x],'g-',label = 'odom')
 ax3.set_xlabel('tiempo, [s]')
