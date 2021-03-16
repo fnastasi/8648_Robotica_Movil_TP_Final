@@ -38,11 +38,13 @@ class DiffRobot():
         #time step for simulation is setted to default value 1 seg.
         self.__ground_truth = (x, y, theta)
         self.__odometry = (x, y, theta)
-        self.dt = 1.0
-
+        #self.dt = 1.0
+        self.dt = 0.1
+        
         #Kinematics parameters 
         #values expressed in meters
-        self.r = 0.072
+        #self.r = 0.072
+        self.r = 0.036
         self.l = 0.235
 
         #Robot dimensions
@@ -134,7 +136,8 @@ class DiffRobot():
                 pass
         
         distance_measured = math.sqrt((last_free_pos_x - x)**2 + (last_free_pos_y - y)**2)
-        error = np.random.normal(scale = 0.015 * distance_measured)
+        #error = np.random.normal(scale = 0.015 * distance_measured)
+        error = np.random.normal(scale = 0.15 * distance_measured)
         return  distance_measured + self.__lidar_dr_center_robot + error
 
 
@@ -415,8 +418,8 @@ class DiffRobot():
                 next_odom_y = self.__odometry[1] + v_w * np.cos(self.__odometry[2]) - v_w * np.cos(self.__odometry[2] + w * self.dt)
                 next_odom_theta = self.__odometry[2] + w * self.dt
             else:
-                next_odom_x = self.__odometry[0]
-                next_odom_y = self.__odometry[1]
+                next_odom_x = self.__odometry[0] + v * np.cos(self.__odometry[2]) * self.dt
+                next_odom_y = self.__odometry[1] + v * np.sin(self.__odometry[2]) * self.dt
                 next_odom_theta = self.__odometry[2]
 
             #compute next ground truth
@@ -426,13 +429,13 @@ class DiffRobot():
 
             if abs(w_hat) > 0:
                 v_w = (v_hat / w_hat)
-                next_gt_x = self.__ground_truth[0] - v_w * np.sin(self.__ground_truth[2]) + v_w * np.sin(self.__ground_truth[2] + w * self.dt)
-                next_gt_y = self.__ground_truth[1] + v_w * np.cos(self.__ground_truth[2]) - v_w * np.cos(self.__ground_truth[2] + w * self.dt)
+                next_gt_x = self.__ground_truth[0] - v_w * np.sin(self.__ground_truth[2]) + v_w * np.sin(self.__ground_truth[2] + w_hat * self.dt)
+                next_gt_y = self.__ground_truth[1] + v_w * np.cos(self.__ground_truth[2]) - v_w * np.cos(self.__ground_truth[2] + w_hat * self.dt)
                 next_gt_theta = self.__ground_truth[2] + w_hat * self.dt + gamma_hat * self.dt
             else:
-                next_gt_x = self.__ground_truth[0]
-                next_gt_y = self.__ground_truth[1]
-                next_gt_theta = self.__ground_truth[2]
+                next_gt_x = self.__ground_truth[0] + v_hat * np.cos(self.__ground_truth[2]) * self.dt
+                next_gt_y = self.__ground_truth[1] + v_hat * np.sin(self.__ground_truth[2]) * self.dt
+                next_gt_theta = self.__ground_truth[2] + gamma_hat * self.dt
 
             iteration_counter = 8
             self.__collision_detected = False
